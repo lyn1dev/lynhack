@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "lynhack",
+	"version": "${version}",
+	"name": "LynHack",
+	"description": "An advanced Minecraft utility tool and client mod.",
+	"authors": [
+		"lyn1dev"
+	],
+	"contact": {
+		"homepage": "https://github.com/lyn1dev/lynhack",
+		"sources": "https://github.com/lyn1dev/lynhack"
+	},
+	"license": "MIT",
+	"icon": "assets/lynhack/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.lynhack.LynHack"
+		],
+		"client": [
+			"com.lynhack.client.LynHackClient"
+		]
+	},
+	"mixins": [
+		"lynhack.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
