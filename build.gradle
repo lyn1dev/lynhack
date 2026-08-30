@@ -53,6 +53,14 @@ jar {
 	}
 }
 
+tasks.register('copyToMods', Copy) {
+	dependsOn remapJar
+	from remapJar
+	into 'D:/profiles/Vulkan Optimized/mods'
+}
+
+build.finalizedBy 'copyToMods'
+
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
