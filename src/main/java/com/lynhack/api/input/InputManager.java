@@ -4,10 +4,12 @@ import com.lynhack.api.event.FrameListener;
 import com.lynhack.api.event.FrameUpdateEvent;
 import com.lynhack.api.util.GaussianRandomUtil;
 import com.lynhack.debug.DebugTracker;
+import com.lynhack.mixin.MinecraftClientAccessor;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
@@ -15,11 +17,10 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Authoritative Closet Input Dispatcher.
+ * Authoritative Tick-Disconnected Closet Input Simulator.
  * 
- * Strictly simulates physical keyboard and mouse inputs through Minecraft's native
- * KeyBinding pipeline with Gaussian hold duration ($40ms - 100ms, \mu=70ms, \sigma=10ms$).
- * Never bypasses client-side physics or injects synthetic interaction packets directly.
+ * Simulates physical inputs per-frame (disconnected from 20 TPS ticks)
+ * using Minecraft's native input methods and Gaussian hold durations ($40-100ms, \mu=70ms, \sigma=10ms$).
  */
 public class InputManager implements FrameListener {
     private static final InputManager INSTANCE = new InputManager();
@@ -35,7 +36,7 @@ public class InputManager implements FrameListener {
         }
     }
 
-    private static final int ATTACK_KEY_CODE = -100; // Special code for attack key binding
+    private static final int ATTACK_KEY_CODE = -100;
 
     // Key -> Set of requesting modules/objects
     private final Map<Integer, Set<Object>> activeKeyRequesters = new ConcurrentHashMap<>();
@@ -43,7 +44,7 @@ public class InputManager implements FrameListener {
     private final Map<Integer, Long> keyPressTimestamps = new ConcurrentHashMap<>();
     // Key -> Target minimum hold duration for the current press cycle
     private final Map<Integer, Long> targetHoldDurations = new ConcurrentHashMap<>();
-    // Monotonic PriorityQueue for delayed releases (drained strictly on main render thread)
+    // Monotonic PriorityQueue for delayed releases (drained per frame on the main render thread)
     private final PriorityQueue<PendingRelease> pendingReleases = new PriorityQueue<>(Comparator.comparingLong(PendingRelease::targetReleaseTimeMs));
     // Physical keys to block from vanilla Minecraft
     private final Set<Integer> blockedPhysicalKeys = ConcurrentHashMap.newKeySet();
@@ -52,6 +53,7 @@ public class InputManager implements FrameListener {
 
     /**
      * Main-thread frame loop: drains expired key releases using O(1) peek checks.
+     * Operates completely independently of 20 TPS server/client tick loops.
      */
     @Override
     public void onFrame(FrameUpdateEvent event) {
@@ -66,20 +68,35 @@ public class InputManager implements FrameListener {
     }
 
     /**
-     * Simulates an authentic attack input (Left Mouse Button click) via Minecraft's native KeyBinding.
-     * Generates a Gaussian hold duration ($40ms - 100ms$) and releases cleanly without direct packet injection.
+     * Frame-perfect attack simulation disconnected from 20 TPS ticks.
+     * Sets native crosshairTarget to the frame-perfect hit result, invokes native doAttack(),
+     * holds the attack key with Gaussian duration, and drains on the render thread.
      */
-    public void simulateAttack(Object requester, String details) {
+    public void simulateAttack(Object requester, HitResult frameTarget, String details) {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.options == null || mc.options.attackKey == null) return;
+        if (mc.player == null || mc.world == null) return;
 
-        KeyBinding attackKey = mc.options.attackKey;
+        // 1. Assign frame-perfect crosshair target before triggering attack
+        if (frameTarget != null) {
+            mc.crosshairTarget = frameTarget;
+        }
+
+        // 2. Clear vanilla attack cooldown blocker so attack executes on this exact frame
+        MinecraftClientAccessor accessor = (MinecraftClientAccessor) mc;
+        if (accessor.getAttackCooldown() > 0) {
+            accessor.setAttackCooldown(0);
+        }
+
+        // 3. Trigger native vanilla attack (executes immediately on this frame)
+        accessor.invokeDoAttack();
+
+        // 4. Press native KeyBinding and schedule Gaussian release
+        if (mc.options != null && mc.options.attackKey != null) {
+            mc.options.attackKey.setPressed(true);
+        }
+
         long holdDuration = GaussianRandomUtil.nextKeyHoldDuration();
         long targetReleaseTime = Util.getMeasuringTimeMs() + holdDuration;
-
-        // Press native attack key and increment click counter
-        attackKey.setPressed(true);
-        KeyBinding.onKeyPressed(attackKey.getDefaultKey());
 
         synchronized (pendingReleases) {
             pendingReleases.add(new PendingRelease(requester, ATTACK_KEY_CODE, targetReleaseTime));

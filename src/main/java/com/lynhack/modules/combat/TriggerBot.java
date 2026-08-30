@@ -19,10 +19,10 @@ import net.minecraft.util.hit.EntityHitResult;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * 100% Pure Closet TriggerBot.
+ * Frame-Perfect Tick-Disconnected Closet TriggerBot.
  * 
- * Only reads state via ClientState and simulates authentic mouse clicks via InputManager.
- * Zero direct packet manipulation or bypasses.
+ * Reads state via ClientState per-frame and commands InputManager to trigger
+ * native attacks instantly on the exact render frame conditions are met.
  */
 public class TriggerBot extends Module {
     private final MinecraftClient mc = MinecraftClient.getInstance();
@@ -35,7 +35,7 @@ public class TriggerBot extends Module {
     private final BooleanSetting weaponsOnly = addSetting(new BooleanSetting("WeaponsOnly", "Only trigger when holding a sword or axe", false));
 
     public TriggerBot() {
-        super("TriggerBot", "Automatically simulates attack inputs when aiming at an entity with ready cooldown", Category.COMBAT, GLFW.GLFW_KEY_R);
+        super("TriggerBot", "Frame-perfect attack simulation disconnected from 20 TPS ticks", Category.COMBAT, GLFW.GLFW_KEY_R);
     }
 
     @Override
@@ -88,10 +88,10 @@ public class TriggerBot extends Module {
             return;
         }
 
-        // 5. Strictly simulate physical input: Press LMB via InputManager
+        // 5. Conditions satisfied! Execute tick-disconnected frame-perfect attack simulation
         double dist = mc.player.distanceTo(target);
         String details = String.format("Target: %s [%.2fm] (Cooldown: %.0f%%)", target.getName().getString(), dist, cooldown * 100.0f);
 
-        InputManager.getInstance().simulateAttack(this, details);
+        InputManager.getInstance().simulateAttack(this, hitResult, details);
     }
 }
