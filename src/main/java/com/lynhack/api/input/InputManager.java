@@ -3,10 +3,12 @@ package com.lynhack.api.input;
 import com.lynhack.api.event.FrameListener;
 import com.lynhack.api.event.FrameUpdateEvent;
 import com.lynhack.api.util.GaussianRandomUtil;
+import com.lynhack.debug.DebugTracker;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.util.Util;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,9 +67,14 @@ public class InputManager implements FrameListener {
 
         if (wasEmpty) {
             long now = Util.getMeasuringTimeMs();
+            long holdDuration = GaussianRandomUtil.nextKeyHoldDuration();
             keyPressTimestamps.put(keycode, now);
-            targetHoldDurations.put(keycode, GaussianRandomUtil.nextKeyHoldDuration());
+            targetHoldDurations.put(keycode, holdDuration);
             setPhysicalKeyState(keycode, true);
+
+            // Log to debug telemetry
+            String reqName = requester instanceof com.lynhack.api.module.Module m ? m.getName() : requester.getClass().getSimpleName();
+            DebugTracker.getInstance().recordSimulatedPress(keycode, getKeyName(keycode), reqName, holdDuration);
         }
     }
 
@@ -164,12 +171,35 @@ public class InputManager implements FrameListener {
     }
 
     public boolean shouldBlockPhysicalKey(int keycode) {
-        return blockedPhysicalKeys.contains(keycode);
+        boolean blocked = blockedPhysicalKeys.contains(keycode);
+        if (blocked) {
+            DebugTracker.getInstance().recordPhysicalBlock(keycode, getKeyName(keycode));
+        }
+        return blocked;
     }
 
     public boolean isSimulatedPressed(int keycode) {
         Set<Object> reqs = activeKeyRequesters.get(keycode);
         return reqs != null && !reqs.isEmpty();
+    }
+
+    public static String getKeyName(int keycode) {
+        String name = GLFW.glfwGetKeyName(keycode, 0);
+        if (name != null && !name.isEmpty()) return name.toUpperCase();
+        return switch (keycode) {
+            case GLFW.GLFW_KEY_SPACE -> "SPACE";
+            case GLFW.GLFW_KEY_LEFT_SHIFT -> "LSHIFT";
+            case GLFW.GLFW_KEY_RIGHT_SHIFT -> "RSHIFT";
+            case GLFW.GLFW_KEY_LEFT_CONTROL -> "LCTRL";
+            case GLFW.GLFW_KEY_RIGHT_CONTROL -> "RCTRL";
+            case GLFW.GLFW_KEY_LEFT_ALT -> "LALT";
+            case GLFW.GLFW_KEY_RIGHT_ALT -> "RALT";
+            case GLFW.GLFW_KEY_W -> "W";
+            case GLFW.GLFW_KEY_A -> "A";
+            case GLFW.GLFW_KEY_S -> "S";
+            case GLFW.GLFW_KEY_D -> "D";
+            default -> "KEY_" + keycode;
+        };
     }
 
     private void setPhysicalKeyState(int keycode, boolean pressed) {

@@ -13,3 +13,7 @@ out/
 .vscode/
 .DS_Store
 *.log
+
+# Debug telemetry system (easily deletable)
+src/main/java/com/lynhack/debug/
+debug/

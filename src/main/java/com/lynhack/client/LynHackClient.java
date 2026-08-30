@@ -5,6 +5,7 @@ import com.lynhack.api.event.EventBus;
 import com.lynhack.api.input.InputManager;
 import com.lynhack.api.module.ModuleManager;
 import com.lynhack.api.state.ClientState;
+import com.lynhack.debug.DebugServer;
 import com.lynhack.modules.movement.SampleModule;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -25,6 +26,9 @@ public class LynHackClient implements ClientModInitializer {
 
         // 3. Register default modules
         ModuleManager.getInstance().register(new SampleModule());
+
+        // 4. Start local debug telemetry web server (daemon background thread)
+        DebugServer.start();
 
         LynHack.LOGGER.info("[{}] Subsystems initialized successfully! ClickGUI bound to RIGHT SHIFT.", LynHack.MOD_NAME);
     }
