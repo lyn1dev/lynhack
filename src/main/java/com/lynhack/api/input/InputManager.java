@@ -8,14 +8,19 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.Hand;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Authoritative Closet Input Dispatcher.
+ * 
+ * Strictly simulates physical keyboard and mouse inputs through Minecraft's native
+ * KeyBinding pipeline with Gaussian hold duration ($40ms - 100ms, \mu=70ms, \sigma=10ms$).
+ * Never bypasses client-side physics or injects synthetic interaction packets directly.
+ */
 public class InputManager implements FrameListener {
     private static final InputManager INSTANCE = new InputManager();
 
@@ -30,7 +35,7 @@ public class InputManager implements FrameListener {
         }
     }
 
-    private static final int ATTACK_KEY_CODE = -100; // Identifier for mouse left click attack
+    private static final int ATTACK_KEY_CODE = -100; // Special code for attack key binding
 
     // Key -> Set of requesting modules/objects
     private final Map<Integer, Set<Object>> activeKeyRequesters = new ConcurrentHashMap<>();
@@ -61,25 +66,20 @@ public class InputManager implements FrameListener {
     }
 
     /**
-     * Simulates an attack on a targeted entity with Gaussian hold duration ($40ms - 100ms) and telemetry logging.
+     * Simulates an authentic attack input (Left Mouse Button click) via Minecraft's native KeyBinding.
+     * Generates a Gaussian hold duration ($40ms - 100ms$) and releases cleanly without direct packet injection.
      */
-    public void simulateAttack(Object requester, Entity target, String details) {
+    public void simulateAttack(Object requester, String details) {
         MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || mc.interactionManager == null) return;
+        if (mc.options == null || mc.options.attackKey == null) return;
 
+        KeyBinding attackKey = mc.options.attackKey;
         long holdDuration = GaussianRandomUtil.nextKeyHoldDuration();
         long targetReleaseTime = Util.getMeasuringTimeMs() + holdDuration;
 
-        // Perform in-game attack actions
-        if (target != null) {
-            mc.interactionManager.attackEntity(mc.player, target);
-        }
-        mc.player.swingHand(Hand.MAIN_HAND);
-
-        // Simulate attack key down state
-        if (mc.options != null && mc.options.attackKey != null) {
-            mc.options.attackKey.setPressed(true);
-        }
+        // Press native attack key and increment click counter
+        attackKey.setPressed(true);
+        KeyBinding.onKeyPressed(attackKey.getDefaultKey());
 
         synchronized (pendingReleases) {
             pendingReleases.add(new PendingRelease(requester, ATTACK_KEY_CODE, targetReleaseTime));

@@ -18,6 +18,12 @@ import net.minecraft.registry.tag.ItemTags;
 import net.minecraft.util.hit.EntityHitResult;
 import org.lwjgl.glfw.GLFW;
 
+/**
+ * 100% Pure Closet TriggerBot.
+ * 
+ * Only reads state via ClientState and simulates authentic mouse clicks via InputManager.
+ * Zero direct packet manipulation or bypasses.
+ */
 public class TriggerBot extends Module {
     private final MinecraftClient mc = MinecraftClient.getInstance();
 
@@ -29,7 +35,7 @@ public class TriggerBot extends Module {
     private final BooleanSetting weaponsOnly = addSetting(new BooleanSetting("WeaponsOnly", "Only trigger when holding a sword or axe", false));
 
     public TriggerBot() {
-        super("TriggerBot", "Automatically attacks targeted entities when attack cooldown is ready", Category.COMBAT, GLFW.GLFW_KEY_R);
+        super("TriggerBot", "Automatically simulates attack inputs when aiming at an entity with ready cooldown", Category.COMBAT, GLFW.GLFW_KEY_R);
     }
 
     @Override
@@ -38,7 +44,7 @@ public class TriggerBot extends Module {
             return;
         }
 
-        // 1. Check weapon requirement if enabled (uses 1.21+ ItemTags)
+        // 1. Read state: Check weapon requirement if enabled
         if (weaponsOnly.getValue()) {
             ItemStack stack = mc.player.getMainHandStack();
             boolean isWeapon = stack.isIn(ItemTags.SWORDS) || stack.isIn(ItemTags.AXES);
@@ -47,13 +53,13 @@ public class TriggerBot extends Module {
             }
         }
 
-        // 2. Check current held item's attack cooldown
+        // 2. Read state: Check current held item's attack cooldown
         float cooldown = mc.player.getAttackCooldownProgress(0.5f);
         if (cooldown < cooldownThreshold.getValueFloat()) {
             return;
         }
 
-        // 3. Lazy frame-perfect raycast check via ClientState
+        // 3. Read state: Frame-perfect lazy raycast check via ClientState
         EntityHitResult hitResult = ClientState.getTargetedEntity(reach.getValue());
         if (hitResult == null || hitResult.getEntity() == null) {
             return;
@@ -61,7 +67,7 @@ public class TriggerBot extends Module {
 
         Entity target = hitResult.getEntity();
 
-        // 4. Validate target criteria
+        // 4. Read state: Validate target criteria
         if (!target.isAlive() || target == mc.player) {
             return;
         }
@@ -82,11 +88,10 @@ public class TriggerBot extends Module {
             return;
         }
 
-        // 5. Conditions satisfied! Format telemetry details and simulate attack
+        // 5. Strictly simulate physical input: Press LMB via InputManager
         double dist = mc.player.distanceTo(target);
         String details = String.format("Target: %s [%.2fm] (Cooldown: %.0f%%)", target.getName().getString(), dist, cooldown * 100.0f);
 
-        // Command input simulation with Gaussian hold duration and telemetry logging
-        InputManager.getInstance().simulateAttack(this, target, details);
+        InputManager.getInstance().simulateAttack(this, details);
     }
 }
