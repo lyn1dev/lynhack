@@ -4,9 +4,12 @@ import com.lynhack.api.event.FrameListener;
 import com.lynhack.api.event.FrameUpdateEvent;
 import com.lynhack.api.util.GaussianRandomUtil;
 import com.lynhack.debug.DebugTracker;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.entity.Entity;
+import net.minecraft.util.Hand;
 import net.minecraft.util.Util;
 import org.lwjgl.glfw.GLFW;
 
@@ -26,6 +29,8 @@ public class InputManager implements FrameListener {
             return Long.compare(this.targetReleaseTimeMs, other.targetReleaseTimeMs);
         }
     }
+
+    private static final int ATTACK_KEY_CODE = -100; // Identifier for mouse left click attack
 
     // Key -> Set of requesting modules/objects
     private final Map<Integer, Set<Object>> activeKeyRequesters = new ConcurrentHashMap<>();
@@ -56,6 +61,35 @@ public class InputManager implements FrameListener {
     }
 
     /**
+     * Simulates an attack on a targeted entity with Gaussian hold duration ($40ms - 100ms) and telemetry logging.
+     */
+    public void simulateAttack(Object requester, Entity target, String details) {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.player == null || mc.interactionManager == null) return;
+
+        long holdDuration = GaussianRandomUtil.nextKeyHoldDuration();
+        long targetReleaseTime = Util.getMeasuringTimeMs() + holdDuration;
+
+        // Perform in-game attack actions
+        if (target != null) {
+            mc.interactionManager.attackEntity(mc.player, target);
+        }
+        mc.player.swingHand(Hand.MAIN_HAND);
+
+        // Simulate attack key down state
+        if (mc.options != null && mc.options.attackKey != null) {
+            mc.options.attackKey.setPressed(true);
+        }
+
+        synchronized (pendingReleases) {
+            pendingReleases.add(new PendingRelease(requester, ATTACK_KEY_CODE, targetReleaseTime));
+        }
+
+        String reqName = requester instanceof com.lynhack.api.module.Module m ? m.getName() : requester.getClass().getSimpleName();
+        DebugTracker.getInstance().recordSimulatedPress(GLFW.GLFW_MOUSE_BUTTON_LEFT, "LMB (Attack)", reqName, details, holdDuration);
+    }
+
+    /**
      * Instantly presses a key on behalf of a requester and initializes its Gaussian hold threshold.
      */
     public void simulateKeyPress(Object requester, int keycode) {
@@ -72,9 +106,8 @@ public class InputManager implements FrameListener {
             targetHoldDurations.put(keycode, holdDuration);
             setPhysicalKeyState(keycode, true);
 
-            // Log to debug telemetry
             String reqName = requester instanceof com.lynhack.api.module.Module m ? m.getName() : requester.getClass().getSimpleName();
-            DebugTracker.getInstance().recordSimulatedPress(keycode, getKeyName(keycode), reqName, holdDuration);
+            DebugTracker.getInstance().recordSimulatedPress(keycode, getKeyName(keycode), reqName, "", holdDuration);
         }
     }
 
@@ -114,6 +147,14 @@ public class InputManager implements FrameListener {
     }
 
     private void internalRelease(Object requester, int keycode) {
+        if (keycode == ATTACK_KEY_CODE) {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (mc.options != null && mc.options.attackKey != null) {
+                mc.options.attackKey.setPressed(false);
+            }
+            return;
+        }
+
         Set<Object> requesters = activeKeyRequesters.get(keycode);
         if (requesters != null) {
             requesters.remove(requester);
@@ -142,6 +183,11 @@ public class InputManager implements FrameListener {
                 setPhysicalKeyState(keycode, false);
             }
         }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.options != null && mc.options.attackKey != null) {
+            mc.options.attackKey.setPressed(false);
+        }
     }
 
     /**
@@ -154,6 +200,11 @@ public class InputManager implements FrameListener {
 
         for (Integer keycode : activeKeyRequesters.keySet()) {
             setPhysicalKeyState(keycode, false);
+        }
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+        if (mc.options != null && mc.options.attackKey != null) {
+            mc.options.attackKey.setPressed(false);
         }
 
         activeKeyRequesters.clear();
@@ -198,6 +249,8 @@ public class InputManager implements FrameListener {
             case GLFW.GLFW_KEY_A -> "A";
             case GLFW.GLFW_KEY_S -> "S";
             case GLFW.GLFW_KEY_D -> "D";
+            case GLFW.GLFW_MOUSE_BUTTON_LEFT -> "LMB (Attack)";
+            case GLFW.GLFW_MOUSE_BUTTON_RIGHT -> "RMB (Use)";
             default -> "KEY_" + keycode;
         };
     }

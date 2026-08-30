@@ -6,6 +6,7 @@ import com.lynhack.api.input.InputManager;
 import com.lynhack.api.module.ModuleManager;
 import com.lynhack.api.state.ClientState;
 import com.lynhack.debug.DebugServer;
+import com.lynhack.modules.combat.TriggerBot;
 import com.lynhack.modules.movement.SampleModule;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -24,7 +25,8 @@ public class LynHackClient implements ClientModInitializer {
         // 2. Hook WorldRenderEvents.START_MAIN for per-frame ClientState caching & dispatch
         WorldRenderEvents.START_MAIN.register(context -> ClientState.update());
 
-        // 3. Register default modules
+        // 3. Register modules
+        ModuleManager.getInstance().register(new TriggerBot());
         ModuleManager.getInstance().register(new SampleModule());
 
         // 4. Start local debug telemetry web server (daemon background thread)
